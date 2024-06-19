@@ -124,3 +124,13 @@
     margin-right: 10px;
     color: #0056b3; /* Match the color of the text */
 }
+
+.related-questions {
+    margin-top: 20px;
+    padding: 10px 20px;
+    background-color: #f1f1f1;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    max-width: 600px; /* Adjust as needed */
+    margin: 20px auto; /* Center the related questions box */
+}
