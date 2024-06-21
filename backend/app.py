@@ -2,6 +2,8 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import json
 from models import load_data, create_frequency_dict, AutocompleteApp, extract_words
+#import tensorflow as tf
+
 
 
 app = Flask(__name__)

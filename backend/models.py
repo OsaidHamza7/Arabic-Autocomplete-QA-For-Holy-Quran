@@ -66,7 +66,13 @@ def preprocess(text):
     text = text.replace('التى', 'التي')
 
     # Additional normalization rules
-    text = text.replace('ى', 'ي').replace('ة', 'ه')  # Example rules
+    text = text.replace('\u0649', '\u064A')  # Replace 'ى' (U+0649) with 'ي' (U+064A)
+    text = text.replace('\u0624', '\u0621')  # Replace 'ؤ' (U+0624) with 'ء' (U+0621)
+    text = text.replace('\u0626', '\u0621')  # Replace 'ئ' (U+0626) with 'ء' (U+0621)
+    text = text.replace('\u0629', '\u0647')  # Replace 'ة' (U+0629) with 'ه' (U+0647)
+
+    # Remove the Arabic definite article "ال"
+    text = re.sub(r'\bال', '', text)
 
     # Remove punctuation and non-word characters
     text = re.sub(r'[^\w\s]', '', text)
@@ -164,6 +170,7 @@ class AutocompleteApp:
         self.freq_dict = freq_dict
         self.spell_checker = ArabicSpellChecker(dictionary)
 
+
     def accept_correction(self, user_input):
         if user_input.startswith("Did you mean:"):
             corrected_text = user_input.split(": ", 1)[1]
@@ -200,8 +207,10 @@ class AutocompleteApp:
             words = text.split()
             corrected_words = []
             for word in words:
+                word = preprocess(word)
                 if self.spell_checker.is_misspelled(word):
                     corrected_words.append(self.spell_checker.correct_word(word))
+                    print(f"Corrected word: {corrected_words[-1]} for {word}")
                 else:
                     corrected_words.append(word)
 
@@ -215,8 +224,8 @@ class AutocompleteApp:
 
             combined_suggestions = list(suggestions.keys()) + list(suggestions2.keys())
 
-
             if len(combined_suggestions) < 10:
+                print("********************************************")
                 unique_plus_suggestions2 = []
                 for idx, row in suggestions_plus.iterrows():
                     suggestion = row['q']
@@ -224,7 +233,10 @@ class AutocompleteApp:
                         unique_plus_suggestions2.append(suggestion)
                         if len(combined_suggestions) + len(unique_plus_suggestions2) >= 10:
                             break
-                combined_suggestions += unique_plus_suggestions2
+                combined_suggestions = combined_suggestions + unique_plus_suggestions2
+
+            # remove duplicates
+            combined_suggestions = list(dict.fromkeys(combined_suggestions))
 
             # Limit to top 10 suggestions            
             final_suggestions = combined_suggestions[:10]
