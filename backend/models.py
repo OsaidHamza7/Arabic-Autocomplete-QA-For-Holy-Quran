@@ -1,21 +1,83 @@
-import tkinter as tk
-from tkinter import Listbox, Label, END
 import pandas as pd
 from collections import defaultdict
 import re
 import Levenshtein as lev
 
+stop_words = set(["ما", "هو", "اذكر", "هي", "في", "من", "إلى", "على", "عن", "أن", "إن", "قد", "هل", "ل", "التي", "الذي", "الذين", "اللاتي", "اللاتي", "اللائي","هم"])
 
-def load_data(file_path1):
+def load_markdown_data(aya_file, tafseer_file):
+    # Read the contents of the files
+    with open(aya_file, 'r', encoding='utf-8') as f:
+        aya_content = f.read()
+        
+    with open(tafseer_file, 'r', encoding='utf-8') as f:
+        tafseer_content = f.read()
+
+    # Split content into sections based on the pattern '# number'
+    aya_sections = re.split(r'\n# \d+\n', aya_content)
+    tafseer_sections = re.split(r'\n# \d+\n', tafseer_content)
+
+    # Ensure the first element is discarded if it's empty
+    if aya_sections[0].strip() == '':
+        aya_sections = aya_sections[1:]
+    if tafseer_sections[0].strip() == '':
+        tafseer_sections = tafseer_sections[1:]
+
+    # Extract verses and explanations
+    data = []
+    for aya, tafseer in zip(aya_sections, tafseer_sections):
+        verse_text = aya.strip()
+        tafseer_text = tafseer.strip()
+        
+        if verse_text and tafseer_text:
+            data.append({
+                'Question': verse_text,
+                'Answer': tafseer_text
+            })
+
+    return pd.DataFrame(data)
+
+def load_data(file_path1, file_path2, aya_file, tafseer_file):
     data1 = pd.read_excel(file_path1)
-    # Load data from the specified sheet and only the 'Question' and 'Answer' columns
-    #data2 = pd.read_excel(file_path2, usecols=['Question', 'Answer'])
-    return pd.concat([data1], ignore_index=True)
+    data2 = pd.read_excel(file_path2, usecols=['Question', 'Answer'])
+    markdown_data = load_markdown_data(aya_file, tafseer_file)
+    data = pd.concat([data1, data2, markdown_data], ignore_index=True)
+
+    print(f"Loaded {len(data)} questions with duplicates.")
+
+    # Remove duplicate questions
+    data = data.drop_duplicates(subset=['Question'])
+
+    print(f"Loaded {len(data)} questions.")
+    print(data.head())
+
+    return data
 
 
 def preprocess(text):
-    # Updated preprocessing to be more efficient and clear
-    return re.sub(r'[^\w\s]', '', text).strip().lower()
+    # Remove Arabic diacritics (حركات التشكيل)
+    diacritics = re.compile(r'[\u0617-\u061A\u064B-\u0652]')
+    text = diacritics.sub('', text)
+
+    # Replace different forms of "ا"
+    text = text.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
+
+    # Normalize specific words
+    text = text.replace('التى', 'التي')
+
+    # Additional normalization rules
+    text = text.replace('ى', 'ي').replace('ة', 'ه')  # Example rules
+
+    # Remove punctuation and non-word characters
+    text = re.sub(r'[^\w\s]', '', text)
+
+    # Remove extra whitespaces
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    # Convert to lowercase (not necessary for Arabic but useful for mixed content)
+    text = text.lower()
+
+    return text
 
 
 def extract_words(data):
@@ -47,11 +109,39 @@ def autocomplete(input_text, freq_dict):
     
     return sorted_suggestions
 
+def generate_ngrams(text, n):
+    words = text.split()
+    # Generate n-grams from complete phrases instead of just words
+    ngrams = [' '.join(words[i:i+n]) for i in range(len(words)-n+1)]
+    return ngrams
 
-def find_closest_questions(input_text, data):
+
+def weighted_jaccard_similarity(str1, str2, stop_words_weight=0.3):
+    a = set(str1.split())
+    b = set(str2.split())
+    intersection = a.intersection(b)
+    union = a.union(b)
+    
+    intersection_weighted_sum = sum([stop_words_weight if word in stop_words else 1.0 for word in intersection])
+    union_weighted_sum = sum([stop_words_weight if word in stop_words else 1.0 for word in union])
+    
+    return float(intersection_weighted_sum) / union_weighted_sum
+
+def find_closest_questions(input_text, data, n=3):
     input_text = preprocess(input_text)
-    # Using similarity or direct match to find the closest questions
-    data['similarity'] = data['q'].apply(lambda question: -lev.distance(preprocess(question), input_text))
+    input_ngrams = generate_ngrams(input_text, n)
+    input_ngrams = ' '.join(input_ngrams)
+
+    def calculate_similarity(question):
+        question_ngrams = generate_ngrams(preprocess(question), n)
+        question_ngrams = ' '.join(question_ngrams)
+        return weighted_jaccard_similarity(input_ngrams, question_ngrams)
+    
+    if len(input_text.split()) < n:
+        data['similarity'] = data['q'].apply(lambda question: weighted_jaccard_similarity(preprocess(question), input_text))
+    else:
+        data['similarity'] = data['q'].apply(calculate_similarity)
+
     closest_matches = data.sort_values(by='similarity', ascending=False).head(10)
     return closest_matches[['q', 'a']]
 
@@ -104,8 +194,8 @@ class AutocompleteApp:
             return self.suggest_correction(user_input)
         return self.get_suggestions(user_input)
 
-    def get_suggestions(self, user_input):
-        text = user_input.strip()
+    def get_suggestions(self, text):
+        text = text.strip()
         if text and text[-1] != ' ':
             words = text.split()
             corrected_words = []
@@ -117,15 +207,27 @@ class AutocompleteApp:
 
             corrected_text = ' '.join(corrected_words)
             suggestions = autocomplete(corrected_text, self.freq_dict)
-            print(f"Suggestions from first autocomplete: {suggestions}")
 
             corrected_words[-1] = words[-1]
             corrected_text = ' '.join(corrected_words)
             suggestions2 = autocomplete(corrected_text, self.freq_dict)
-            print(f"Suggestions from second autocomplete: {suggestions2}")
+            suggestions_plus = find_closest_questions(corrected_text, self.data)
 
-            combined_suggestions = {**suggestions, **suggestions2}
-            final_suggestions = list(combined_suggestions.keys())[:10]
+            combined_suggestions = list(suggestions.keys()) + list(suggestions2.keys())
+
+
+            if len(combined_suggestions) < 10:
+                unique_plus_suggestions2 = []
+                for idx, row in suggestions_plus.iterrows():
+                    suggestion = row['q']
+                    if suggestion not in combined_suggestions:
+                        unique_plus_suggestions2.append(suggestion)
+                        if len(combined_suggestions) + len(unique_plus_suggestions2) >= 10:
+                            break
+                combined_suggestions += unique_plus_suggestions2
+
+            # Limit to top 10 suggestions            
+            final_suggestions = combined_suggestions[:10]
             print(f"Final combined suggestions: {final_suggestions}")
             return final_suggestions
         return []

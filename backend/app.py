@@ -9,10 +9,15 @@ CORS(app, supports_credentials=True)
 
 
 # Load your data
-file_path = 'NLP_Project.xlsx'
-data = load_data(file_path)
+file_path1 = 'NLP_Project.xlsx'
+file_path2 = 'AAQQAC.xlsx'
+aya_file = 'uthmani-simple-qurancom.md'
+tafseer_file = 'ar-mokhtasar-islamhouse.md'
+
+data = load_data(file_path1, file_path2, aya_file, tafseer_file)
 data['q'] = data['Question'].astype(str)
 data['a'] = data['Answer'].astype(str)
+
 
 
 # Create frequency dictionary from the loaded questions
@@ -48,6 +53,7 @@ def autocomplete_endpoint():
         if not query:
             return jsonify({"error": "Query parameter is required"}), 400
         
+        print(query)
         suggestions = autocomplete_app.get_suggestions(query)
         app.logger.debug(f"Suggestions: {suggestions}")
         
