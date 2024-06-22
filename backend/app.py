@@ -11,10 +11,10 @@ CORS(app, supports_credentials=True)
 
 
 # Load your data
-file_path1 = 'NLP_Project.xlsx'
-file_path2 = 'AAQQAC.xlsx'
-aya_file = 'uthmani-simple-qurancom.md'
-tafseer_file = 'ar-mokhtasar-islamhouse.md'
+file_path1 = '../Datasets/NLP_Project.xlsx'
+file_path2 = '../Datasets/AAQQAC.xlsx'
+aya_file = '../Datasets/uthmani-simple-qurancom.md'
+tafseer_file = '../Datasets/ar-mokhtasar-islamhouse.md'
 
 data = load_data(file_path1, file_path2, aya_file, tafseer_file)
 data['q'] = data['Question'].astype(str)
